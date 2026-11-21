@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Creeper Prank</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --dirt: #866043;
+    --dirt-dark: #4a3424;
+    --grass: #5d9b3a;
+    --stone: #8b8b8b;
+    --stone-dark: #3c3c3c;
+    --text: #ffffff;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    color-scheme: dark;
+  }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background-color: var(--dirt-dark);
+    background-size: 128px 128px;
+    image-rendering: pixelated;
+    font-family: 'Press Start 2P', 'Courier New', monospace;
+    color: var(--text);
+    overflow: hidden;
+  }
+  body { animation: pan 10s linear infinite; }
+  @keyframes pan { from { background-position: 0 0; } to { background-position: 128px 128px; } }
+  body::before { /* darken the dirt */
+    content: ""; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 0;
+  }
+  .screen { position: fixed; inset: 0; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; gap: 28px; z-index: 1; text-align: center; padding: 16px; }
+  .hidden { display: none !important; }
+
+  /* Minecraft-style button */
+  .mc-btn {
+    font: inherit; font-size: 16px; color: var(--text); cursor: pointer;
+    padding: 16px 40px; background: var(--stone);
+    border: 4px solid #000;
+    box-shadow: inset 4px 4px 0 #c6c6c6, inset -4px -4px 0 var(--stone-dark);
+    text-shadow: 2px 2px 0 #3f3f3f;
+  }
+  .mc-btn:hover { background: #7a8bc4; }
+  .mc-btn:focus-visible { outline: 4px solid #fff; outline-offset: 4px; }
+
+  /* Title menu */
+  :root { --menu-offset: 0px; } /* move the button up/down if the GIF has its own buttons */
+  #start { transform: translateY(var(--menu-offset)); }
+  .titlebg { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover;
+             image-rendering: pixelated; z-index: 0; display: none; }
+  body.has-gif .titlebg { display: block; }
+  body.has-gif::before, body.has-gif .logo { display: none; }
+  .logo { position: relative; font-size: clamp(28px, 7vw, 64px); color: #c6c6c6; letter-spacing: 2px;
+          text-shadow: 4px 4px 0 #555, 8px 8px 0 #222; animation: bob 2.4s ease-in-out infinite; }
+  .logo small { position: absolute; right: -4%; bottom: -34%; font-size: 14px; color: #ffff55;
+                text-shadow: 2px 2px 0 #3f3f00; transform: rotate(-15deg); white-space: nowrap;
+                animation: pulse .6s ease-in-out infinite alternate; }
+  @keyframes bob { 50% { transform: translateY(-10px); } }
+  @keyframes pulse { to { transform: rotate(-15deg) scale(1.15); } }
+  #play { min-width: min(360px, 80vw); }
+  @media (prefers-reduced-motion: reduce) { body, .logo, .logo small { animation: none; } }
+
+  h1 { font-size: 20px; margin: 0; text-shadow: 3px 3px 0 #000; line-height: 1.5; }
+  #status { font-size: 12px; color: #d0d0d0; text-shadow: 2px 2px 0 #000; }
+
+  /* Progress bar, like the world-loading bar */
+  .bar { width: min(420px, 80vw); height: 20px; background: #000; border: 4px solid #000;
+         outline: 4px solid var(--stone-dark); }
+  .bar > i { display: block; height: 100%; width: 0; background: var(--grass);
+             box-shadow: inset 0 -6px 0 rgba(0,0,0,.25), inset 0 6px 0 rgba(255,255,255,.25); }
+
+  /* Scare layer */
+  #scare { position: fixed; inset: 0; background: radial-gradient(#3f9a28, #14290d); z-index: 10; overflow: hidden; }
+  #creeper { position: absolute; top: 50%; left: 50%; width: 92vmin; height: 92vmin; /* make smaller/bigger here */
+             transform: translate(-50%, -50%); image-rendering: pixelated; }
+  #scare.shake #creeper { animation: shake .06s infinite; }
+  @keyframes shake {
+    0%   { transform: translate(-50%, -50%) scale(1.05) translate(0, 0); }
+    25%  { transform: translate(-50%, -50%) scale(1.10) translate(-12px, 8px); }
+    50%  { transform: translate(-50%, -50%) scale(1.15) translate(10px, -10px); }
+    75%  { transform: translate(-50%, -50%) scale(1.10) translate(-8px, -6px); }
+    100% { transform: translate(-50%, -50%) scale(1.05) translate(6px, 10px); }
+  }
+  #flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+  @media (prefers-reduced-motion: reduce) { #scare.shake #creeper { animation: none; } }
+</style>
+</head>
+<body>
+
+<!-- Start screen: the click is needed so the browser allows sound and fullscreen -->
+<img class="titlebg" id="titleimg" src="title.gif" alt="" onload="document.body.classList.add('has-gif')">
+<div class="screen" id="start">
+  <div class="logo">MINECRAFT<small>Hssss!</small></div>
+  <button class="mc-btn" id="play">Generate new level...</button>
+</div>
+
+<!-- Loading screen -->
+<div class="screen hidden" id="loader">
+  <h1 id="status">Loading level...</h1>
+  <div class="bar"><i id="fill"></i></div>
+</div>
+
+<!-- Jump scare -->
+<div id="scare" class="hidden">
+  <canvas id="creeper" width="16" height="16"></canvas>
+  <div id="flash"></div>
+</div>
+
+<!-- Replay -->
+<div class="screen hidden" id="again" style="z-index:20">
+  <h1>Aw man...</h1>
+  <button class="mc-btn" id="replay">Respawn</button>
+</div>
+
+<script>
+  // ---------- Settings (change these!) ----------
+  const LOAD_MS   = 5000;  // how long the fake loading takes
+  const PAUSE_MS  = 1200;  // silence before the scare
+  const VOLUME    = 0.5;   // 0 to 1: lower it for testing!
+
+  const STEPS = [
+    [0,  'Loading level...'],
+    [25, 'Building terrain...'],
+    [55, 'Generating chunks...'],
+    [85, 'Spawning mobs...']
+  ];
+
+  const $ = id => document.getElementById(id);
+
+  // ---------- Textures drawn with code (no files needed) ----------
+  function makeDirtTexture() {
+    const c = document.createElement('canvas'); c.width = c.height = 16;
+    const g = c.getContext('2d');
+    const shades = ['#866043', '#7a5638', '#946b4b', '#6b4a31', '#a0764f'];
+    for (let y = 0; y < 16; y++)
+      for (let x = 0; x < 16; x++) {
+        g.fillStyle = shades[Math.floor(Math.random() * shades.length)];
+        g.fillRect(x, y, 1, 1);
+      }
+    return c.toDataURL();
+  }
+  document.body.style.backgroundImage = 'url(' + makeDirtTexture() + ')';
+
+  // Creeper face: 8x8 pattern, 1 = black
+  const FACE = [
+    '00000000',
+    '00000000',
+    '01100110',
+    '01100110',
+    '00011000',
+    '00111100',
+    '00111100',
+    '00100100'
+  ];
+  function drawCreeper() {
+    const g = $('creeper').getContext('2d');
+    const greens = ['#4caf30', '#5cc23c', '#3f9a28', '#6fd04a', '#46a82d'];
+    for (let y = 0; y < 16; y++)
+      for (let x = 0; x < 16; x++) {
+        g.fillStyle = greens[Math.floor(Math.random() * greens.length)];
+        g.fillRect(x, y, 1, 1);
+      }
+    g.fillStyle = '#000';
+    FACE.forEach((row, ry) => [...row].forEach((v, rx) => {
+      if (v === '1') g.fillRect(rx * 2, ry * 2, 2, 2);
+    }));
+  }
+  drawCreeper();
+
+  // ---------- Sounds made with Web Audio (no files needed) ----------
+  let ac;
+  function noiseSource(seconds) {
+    const buf = ac.createBuffer(1, ac.sampleRate * seconds, ac.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    const src = ac.createBufferSource(); src.buffer = buf; return src;
+  }
+  function drone() { // low cave-like hum
+    const o = ac.createOscillator(), f = ac.createBiquadFilter(), g = ac.createGain();
+    o.type = 'sawtooth'; o.frequency.value = 55;
+    f.type = 'lowpass'; f.frequency.value = 180;
+    g.gain.value = 0.05 * VOLUME;
+    o.connect(f).connect(g).connect(ac.destination); o.start();
+    return { stop() { g.gain.linearRampToValueAtTime(0, ac.currentTime + 0.5); o.stop(ac.currentTime + 0.6); } };
+  }
+  function hiss(seconds) {
+    const s = noiseSource(seconds), f = ac.createBiquadFilter(), g = ac.createGain();
+    f.type = 'highpass'; f.frequency.value = 3500;
+    g.gain.setValueAtTime(0.01, ac.currentTime);
+    g.gain.linearRampToValueAtTime(0.5 * VOLUME, ac.currentTime + seconds);
+    s.connect(f).connect(g).connect(ac.destination); s.start();
+  }
+  function boom() {
+    const s = noiseSource(1.6), f = ac.createBiquadFilter(), g = ac.createGain();
+    f.type = 'lowpass'; f.frequency.value = 500;
+    g.gain.setValueAtTime(1.2 * VOLUME, ac.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 1.6);
+    s.connect(f).connect(g).connect(ac.destination); s.start();
+  }
+
+  // ---------- The sequence ----------
+  let humming;
+
+  function start() {
+    ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+    ac.resume();
+    // Fullscreen is optional: Esc always exits it
+    try { document.documentElement.requestFullscreen && document.documentElement.requestFullscreen().catch(() => {}); } catch (e) {}
+
+    $('start').classList.add('hidden');
+    $('titleimg').classList.add('hidden');
+    document.body.classList.remove('has-gif');
+    $('again').classList.add('hidden');
+    $('scare').classList.add('hidden');
+    $('scare').classList.remove('shake');
+    $('loader').classList.remove('hidden');
+    $('fill').style.width = '0%';
+    humming = drone();
+
+    const t0 = performance.now();
+    const timer = setInterval(() => {
+      const p = Math.min((performance.now() - t0) / LOAD_MS * 100, 100);
+      $('fill').style.width = p + '%';
+      STEPS.forEach(([from, text]) => { if (p >= from) $('status').textContent = text; });
+      if (p >= 100) { clearInterval(timer); finish(); }
+    }, 40);
+  }
+
+  function finish() {
+    humming.stop();
+    $('loader').classList.add('hidden');
+    setTimeout(scare, PAUSE_MS);
+  }
+
+  function scare() {
+    $('scare').classList.remove('hidden');
+    $('scare').classList.add('shake');
+    hiss(0.9);
+    setTimeout(() => {
+      boom();
+      const fl = $('flash');
+      fl.style.transition = 'none'; fl.style.opacity = '1';
+      requestAnimationFrame(() => {
+        fl.style.transition = 'opacity 1.2s ease-out'; fl.style.opacity = '0';
+      });
+      $('scare').classList.remove('shake');
+      setTimeout(() => {
+        $('scare').classList.add('hidden');
+        $('again').classList.remove('hidden');
+      }, 1800);
+    }, 900);
+  }
+
+  $('play').addEventListener('click', start);
+  // Respawn opens the Steam profile (change the link here)
+  const STEAM_URL = 'https://steamcommunity.com/id/HyBiRa';
+  $('replay').addEventListener('click', () => {
+    try { window.top.location.href = STEAM_URL; }   // normal case
+    catch (e) { window.open(STEAM_URL, '_blank'); } // if the page is embedded and navigation is blocked
+  });
+</script>
+</body>
+</html>
